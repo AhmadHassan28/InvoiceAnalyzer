@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Smart Invoice Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .animated-gradient {
+            background: linear-gradient(-45deg, #f093fb, #f5576c, #4facfe, #00f2fe);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+    </style>
+</head>
+<body class="animated-gradient min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md transform hover:scale-105 transition duration-300">
+        <div class="text-center mb-8">
+            <div class="bg-gradient-to-r from-pink-600 to-purple-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                <i class="fas fa-user-plus text-white text-3xl"></i>
+            </div>
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">Create Account</h1>
+            <p class="text-gray-600">Join us and start analyzing documents</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="mb-6 p-4 rounded-lg {% if category == 'error' %}bg-red-100 border-2 border-red-400 text-red-700{% else %}bg-green-100 border-2 border-green-400 text-green-700{% endif %} animate-pulse">
+                        <i class="fas {% if category == 'error' %}fa-exclamation-circle{% else %}fa-check-circle{% endif %} mr-2"></i>
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('register') }}">
+            <div class="mb-4">
+                <label class="block text-gray-700 text-sm font-bold mb-2">
+                    <i class="fas fa-user mr-2 text-blue-600"></i>Username
+                </label>
+                <input type="text" name="username" required
+                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 transition"
+                       placeholder="Choose a username">
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-gray-700 text-sm font-bold mb-2">
+                    <i class="fas fa-envelope mr-2 text-green-600"></i>Email
+                </label>
+                <input type="email" name="email" required
+                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-green-500 transition"
+                       placeholder="your@email.com">
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-gray-700 text-sm font-bold mb-2">
+                    <i class="fas fa-lock mr-2 text-purple-600"></i>Password
+                </label>
+                <input type="password" name="password" required minlength="6"
+                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 transition"
+                       placeholder="At least 6 characters">
+                <p class="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
+            </div>
+
+            <button type="submit" 
+                    class="w-full bg-gradient-to-r from-pink-600 to-purple-600 text-white py-3 rounded-lg font-bold text-lg hover:from-pink-700 hover:to-purple-700 transition duration-300 transform hover:scale-105 shadow-lg">
+                <i class="fas fa-user-plus mr-2"></i>Create Account
+            </button>
+        </form>
+
+        <div class="mt-6 text-center">
+            <p class="text-gray-600">
+                Already have an account? 
+                <a href="{{ url_for('login') }}" class="text-purple-600 font-bold hover:underline">Sign In</a>
+            </p>
+        </div>
+
+        <div class="mt-6 text-center">
+            <a href="{{ url_for('landing') }}" class="text-gray-500 text-sm hover:text-gray-700 transition">
+                <i class="fas fa-arrow-left mr-1"></i>Back to Home
+            </a>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,146 @@
+import os
+import cv2
+import pytesseract
+import numpy as np
+import re
+from PIL import Image
+import pdf2image
+
+# Configure Tesseract path based on environment
+if os.name == 'nt':  # Windows
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# Docker/Linux auto-detects tesseract at /usr/bin/tesseract
+
+class InvoiceAnalyzer:
+    def __init__(self):
+        self.currency_symbols = {
+            '\$': 'USD', 
+            '€': 'EUR', 
+            '£': 'GBP', 
+            '¥': 'JPY',
+            '₹': 'INR', 
+            'Rs': 'INR', 
+            'PKR': 'PKR',
+            'USD': 'USD',
+            'EUR': 'EUR',
+            'GBP': 'GBP'
+        }
+        
+        self.document_keywords = {
+            'invoice': ['invoice', 'bill', 'inv no', 'invoice no', 'invoice #'],
+            'receipt': ['receipt', 'payment received', 'paid'],
+            'bill': ['bill', 'statement', 'amount due']
+        }
+    
+    def analyze_document(self, filepath):
+        try:
+            if filepath.lower().endswith('.pdf'):
+                text = self._extract_text_from_pdf(filepath)
+            else:
+                text = self._extract_text_from_image(filepath)
+            
+            if not text.strip():
+                raise ValueError("No text could be extracted from document")
+            
+            doc_type = self._classify_document(text)
+            amount = self._extract_amount(text)
+            currency = self._extract_currency(text)
+            vendor = self._extract_vendor(text)
+            confidence = self._calculate_confidence(text)
+            
+            return {
+                'document_type': doc_type,
+                'total_amount': amount,
+                'currency': currency,
+                'vendor_name': vendor,
+                'text': text,
+                'confidence': confidence,
+                'status': 'success'
+            }
+        except Exception as e:
+            return {
+                'document_type': 'unknown',
+                'total_amount': 0.0,
+                'currency': 'USD',
+                'vendor_name': 'Unknown',
+                'text': '',
+                'confidence': 0.0,
+                'status': 'error',
+                'error': str(e)
+            }
+    
+    def _extract_text_from_image(self, filepath):
+        img = cv2.imread(filepath)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
+        gray = cv2.medianBlur(gray, 3)
+        text = pytesseract.image_to_string(gray)
+        return text
+    
+    def _extract_text_from_pdf(self, filepath):
+        try:
+            images = pdf2image.convert_from_path(filepath, dpi=300, first_page=1, last_page=1)
+            if not images:
+                return ""
+            text = pytesseract.image_to_string(images[0])
+            return text
+        except Exception as e:
+            print(f"PDF extraction error: {e}")
+            return ""
+    
+    def _classify_document(self, text):
+        text_lower = text.lower()
+        scores = {}
+        for doc_type, keywords in self.document_keywords.items():
+            score = sum(1 for keyword in keywords if keyword in text_lower)
+            scores[doc_type] = score
+        if max(scores.values()) > 0:
+            return max(scores, key=scores.get)
+        return 'invoice'
+    
+    def _extract_amount(self, text):
+        patterns = [
+            r'(?:total|amount|sum|pay|due)[\s:]*[\$€£¥₹Rs]*\s*(\d+[,.]?\d*\.?\d+)',
+            r'[\$€£¥₹]\s*(\d+[,.]?\d*\.?\d+)',
+            r'(?:Rs\.?|PKR)\s*(\d+[,.]?\d*\.?\d+)',
+        ]
+        amounts = []
+        for pattern in patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                try:
+                    amount_str = match.group(1).replace(',', '')
+                    amounts.append(float(amount_str))
+                except:
+                    continue
+        return max(amounts) if amounts else 0.0
+    
+    def _extract_currency(self, text):
+        for symbol, code in self.currency_symbols.items():
+            if symbol in text:
+                return code
+        return 'USD'
+    
+    def _extract_vendor(self, text):
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        noise_words = ['invoice', 'receipt', 'bill', 'tax', 'date']
+        for line in lines[:5]:
+            line_lower = line.lower()
+            if len(line) > 3 and not any(word in line_lower for word in noise_words):
+                return line[:100]
+        return 'Unknown Vendor'
+    
+    def _calculate_confidence(self, text):
+        if not text:
+            return 0.0
+        has_amount = bool(re.search(r'\d+\.?\d*', text))
+        has_keywords = any(kw in text.lower() for keywords in self.document_keywords.values() for kw in keywords)
+        text_length = len(text.split())
+        confidence = 0.0
+        if has_amount:
+            confidence += 0.4
+        if has_keywords:
+            confidence += 0.3
+        if text_length > 20:
+            confidence += 0.3
+        return min(confidence, 1.0)

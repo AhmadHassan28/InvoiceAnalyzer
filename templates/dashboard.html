@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Smart Invoice Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50">
+    <!-- Navbar -->
+    <nav class="bg-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-file-invoice text-blue-600 text-2xl mr-3"></i>
+                    <span class="text-xl font-bold text-gray-800">Smart Invoice Analyzer</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-gray-600">Welcome, <strong class="text-blue-600">{{ current_user.username }}</strong></span>
+                    <a href="{{ url_for('history') }}" class="text-blue-600 hover:text-blue-800 font-medium transition">
+                        <i class="fas fa-history mr-1"></i> History
+                    </a>
+                    <a href="{{ url_for('logout') }}" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition">
+                        <i class="fas fa-sign-out-alt mr-1"></i> Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-xl p-6 text-white transform hover:scale-105 transition">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-blue-100 text-sm mb-2">Total Documents</p>
+                        <p class="text-4xl font-bold">{{ total_docs }}</p>
+                    </div>
+                    <div class="bg-white bg-opacity-20 p-4 rounded-full">
+                        <i class="fas fa-file-alt text-4xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-xl p-6 text-white transform hover:scale-105 transition">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-green-100 text-sm mb-2">Total Amount</p>
+                        <p class="text-4xl font-bold">${{ "%.2f"|format(total_amount) }}</p>
+                    </div>
+                    <div class="bg-white bg-opacity-20 p-4 rounded-full">
+                        <i class="fas fa-dollar-sign text-4xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
+            <h2 class="text-3xl font-bold text-gray-800 mb-6">
+                <i class="fas fa-cloud-upload-alt text-blue-600 mr-2"></i>
+                Upload Document
+            </h2>
+            
+            <div id="dropZone" class="border-4 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-blue-500 hover:bg-blue-50 transition cursor-pointer">
+                <i class="fas fa-file-upload text-6xl text-gray-400 mb-4"></i>
+                <p class="text-xl text-gray-600 mb-2 font-semibold">Drop your invoice/receipt here</p>
+                <p class="text-gray-500 mb-4">or click to browse</p>
+                <input type="file" id="fileInput" class="hidden" accept=".jpg,.jpeg,.png,.pdf">
+                <button onclick="document.getElementById('fileInput').click()" 
+                        class="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-bold hover:from-blue-700 hover:to-purple-700 transition transform hover:scale-105">
+                    Select File
+                </button>
+                <p class="text-sm text-gray-500 mt-4">
+                    <i class="fas fa-check-circle text-green-500 mr-1"></i>
+                    Supported: JPG, PNG, PDF (Max 16MB)
+                </p>
+            </div>
+
+            <!-- Progress Bar -->
+            <div id="progressBar" class="hidden mt-6">
+                <div class="w-full bg-gray-200 rounded-full h-4">
+                    <div id="progressFill" class="bg-gradient-to-r from-blue-500 to-purple-500 h-4 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <p class="text-center text-gray-600 mt-2 font-medium">
+                    <i class="fas fa-spinner fa-spin mr-2"></i>Processing with AI...
+                </p>
+            </div>
+
+            <!-- Results -->
+            <div id="results" class="hidden mt-8 p-6 bg-gradient-to-br from-green-50 to-green-100 rounded-xl border-2 border-green-500">
+                <h3 class="text-2xl font-bold text-green-700 mb-4">
+                    <i class="fas fa-check-circle mr-2"></i>Analysis Complete!
+                </h3>
+                <div class="grid grid-cols-2 gap-4" id="resultDetails"></div>
+            </div>
+        </div>
+
+        <!-- Recent Documents -->
+        <div class="bg-white rounded-2xl shadow-xl p-8">
+            <h2 class="text-3xl font-bold text-gray-800 mb-6">
+                <i class="fas fa-clock text-purple-600 mr-2"></i>Recent Documents
+            </h2>
+            
+            {% if recent_docs %}
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="px-6 py-4 text-left text-sm font-bold text-gray-700">Date</th>
+                            <th class="px-6 py-4 text-left text-sm font-bold text-gray-700">Type</th>
+                            <th class="px-6 py-4 text-left text-sm font-bold text-gray-700">Vendor</th>
+                            <th class="px-6 py-4 text-left text-sm font-bold text-gray-700">Amount</th>
+                            <th class="px-6 py-4 text-left text-sm font-bold text-gray-700">Confidence</th>
+                        </tr>
+                    </thead>
+                   <tbody class="divide-y divide-gray-200">
+    {% for doc in recent_docs %}
+    {% set pct = ((doc.confidence_score or 0) * 100) | int %}
+    {% if pct >= 90 %}
+        {% set width_class = 'w-full' %}
+    {% elif pct >= 75 %}
+        {% set width_class = 'w-3/4' %}
+    {% elif pct >= 50 %}
+        {% set width_class = 'w-1/2' %}
+    {% elif pct >= 25 %}
+        {% set width_class = 'w-1/4' %}
+    {% else %}
+        {% set width_class = 'w-0' %}
+    {% endif %}
+
+    <tr class="hover:bg-gray-50 transition">
+        <td class="px-6 py-4 text-sm text-gray-700">
+            {{ doc.upload_date.strftime('%Y-%m-%d %H:%M') }}
+        </td>
+        <td class="px-6 py-4">
+            <span class="px-3 py-1 text-xs font-bold rounded-full bg-blue-100 text-blue-800">
+                {{ doc.document_type|upper }}
+            </span>
+        </td>
+        <td class="px-6 py-4 text-sm text-gray-700">
+            {{ doc.vendor_name[:30] }}
+        </td>
+        <td class="px-6 py-4 font-bold text-green-600">
+            {{ doc.currency }} {{ "%.2f"|format(doc.total_amount) }}
+        </td>
+        <td class="px-6 py-4">
+            <div class="flex items-center">
+                <div class="w-full bg-gray-200 rounded-full h-2 mr-2">
+                    <div class="bg-green-500 h-2 rounded-full {{ width_class }}"></div>
+                </div>
+                <span class="text-sm font-medium">
+                    {{ pct }}%
+                </span>
+            </div>
+        </td>
+    </tr>
+    {% endfor %}
+</tbody>
+
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <i class="fas fa-inbox text-6xl text-gray-300 mb-4"></i>
+                <p class="text-xl text-gray-600 mb-4">No documents uploaded yet</p>
+                <p class="text-gray-500">Start by uploading your first document above!</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+        const results = document.getElementById('results');
+        const resultDetails = document.getElementById('resultDetails');
+
+        // Drag and drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-blue-500', 'bg-blue-50');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-blue-500', 'bg-blue-50');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-blue-500', 'bg-blue-50');
+            const file = e.dataTransfer.files[0];
+            if (file) uploadFile(file);
+        });
+
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            if (file) uploadFile(file);
+        });
+
+        function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            progressBar.classList.remove('hidden');
+            results.classList.add('hidden');
+            
+            // Simulate progress
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 10;
+                progressFill.style.width = progress + '%';
+                if (progress >= 90) clearInterval(interval);
+            }, 200);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                clearInterval(interval);
+                progressFill.style.width = '100%';
+                
+                setTimeout(() => {
+                    progressBar.classList.add('hidden');
+                    
+                    if (data.success) {
+                        displayResults(data.data);
+                        setTimeout(() => location.reload(), 3000);
+                    } else {
+                        alert('Error: ' + (data.error || 'Processing failed'));
+                    }
+                }, 500);
+            })
+            .catch(error => {
+                clearInterval(interval);
+                progressBar.classList.add('hidden');
+                alert('Upload error: ' + error.message);
+            });
+        }
+
+        function displayResults(data) {
+            resultDetails.innerHTML = `
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <p class="text-sm text-gray-600 mb-1">Document Type</p>
+                    <p class="font-bold text-lg text-blue-600">${data.document_type.toUpperCase()}</p>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <p class="text-sm text-gray-600 mb-1">Total Amount</p>
+                    <p class="font-bold text-lg text-green-600">${data.currency} ${data.total_amount.toFixed(2)}</p>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <p class="text-sm text-gray-600 mb-1">Vendor</p>
+                    <p class="font-bold text-lg text-purple-600">${data.vendor_name}</p>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <p class="text-sm text-gray-600 mb-1">Confidence</p>
+                    <p class="font-bold text-lg text-orange-600">${(data.confidence * 100).toFixed(0)}%</p>
+                </div>
+            `;
+            results.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>

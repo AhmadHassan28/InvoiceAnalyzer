@@ -1,0 +1,16 @@
+# Python ignores
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+
+# Environment & secrets
+.env
+*.pem
+aws keys/
+
+# IDE
+.vscode/
