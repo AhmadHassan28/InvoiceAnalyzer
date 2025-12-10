@@ -9,16 +9,9 @@ import os
 # WINDOWS USERS: Uncomment and update path below
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-# MAC USERS: Usually auto-detected, but if issues uncomment:
-# pytesseract.pytesseract.tesseract_cmd = '/usr/local/bin/tesseract'
-
-# LINUX USERS: Usually auto-detected, but if issues uncomment:
-# pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
-
 class InvoiceAnalyzer:
     """
     AI-powered document analyzer using OCR and pattern matching.
-    Uses lightweight pretrained models - no training required!
     """
     
     def __init__(self):
@@ -44,6 +37,13 @@ class InvoiceAnalyzer:
             
             if not text.strip():
                 raise ValueError("No text could be extracted from document")
+            
+            # DEBUG: Print extracted text (remove in production)
+            print("="*60)
+            print("🔍 EXTRACTED TEXT:")
+            print("="*60)
+            print(text)
+            print("="*60)
             
             # Analyze extracted text
             doc_type = self._classify_document(text)
@@ -121,26 +121,89 @@ class InvoiceAnalyzer:
         return 'invoice'  # Default
     
     def _extract_amount(self, text):
-        """Extract monetary amounts using regex"""
-        # Pattern: Look for currency symbols followed by numbers
-        patterns = [
-            r'(?:total|amount|sum|pay|due)[\s:]*[\$€£¥₹Rs]*\s*(\d+[,.]?\d*\.?\d+)',
-            r'[\$€£¥₹]\s*(\d+[,.]?\d*\.?\d+)',
-            r'(?:Rs\.?|PKR)\s*(\d+[,.]?\d*\.?\d+)',
+        """Extract monetary amounts using IMPROVED regex with priority"""
+        
+        # PRIORITY 1: Look for explicit "Total Amount" or "Total" labels
+        # These are most likely to be the final amount
+        priority_patterns = [
+            r'total\s*amount[\s:]*\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)',  # Total Amount: $5,632
+            r'total[\s:]*\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)',           # Total: $5,632
+            r'amount\s*due[\s:]*\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)',   # Amount Due: $5,632
+            r'grand\s*total[\s:]*\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)',  # Grand Total: $5,632
         ]
         
-        amounts = []
+        # Try priority patterns first
+        for pattern in priority_patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                try:
+                    amount_str = match.group(1).replace(',', '').replace(' ', '')
+                    amount = float(amount_str)
+                    print(f"✅ Found priority amount: ${amount:,.2f} (pattern: {pattern[:30]}...)")
+                    return amount
+                except:
+                    continue
+        
+        # PRIORITY 2: Look for amounts with "Total" keyword nearby
+        # Extract all amounts and find those near "total" keyword
+        amounts_with_context = []
+        lines = text.split('\n')
+        
+        for i, line in enumerate(lines):
+            line_lower = line.lower()
+            if 'total' in line_lower:
+                # Extract numbers from this line and surrounding lines
+                context_lines = lines[max(0, i-1):min(len(lines), i+2)]
+                context_text = ' '.join(context_lines)
+                
+                # Find all amounts in context
+                amount_pattern = r'\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'
+                matches = re.finditer(amount_pattern, context_text)
+                
+                for match in matches:
+                    try:
+                        amount_str = match.group(1).replace(',', '').replace(' ', '')
+                        amount = float(amount_str)
+                        if amount > 100:  # Filter out small numbers (likely not totals)
+                            amounts_with_context.append(amount)
+                            print(f"💡 Found amount near 'total': ${amount:,.2f}")
+                    except:
+                        continue
+        
+        if amounts_with_context:
+            result = max(amounts_with_context)
+            print(f"✅ Selected max from context amounts: ${result:,.2f}")
+            return result
+        
+        # FALLBACK: Extract all amounts and return the largest
+        print("⚠️  Using fallback: extracting all amounts and selecting max")
+        
+        all_amounts = []
+        patterns = [
+            r'\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)',  # $5,632.00 or $5,632
+            r'(\d{1,3}(?:,\d{3})+)',                    # 5,632 (with comma)
+            r'(?:Rs\.?|PKR)\s*(\d+[,.]?\d*)',          # Rs 5632
+        ]
+        
         for pattern in patterns:
             matches = re.finditer(pattern, text, re.IGNORECASE)
             for match in matches:
                 try:
-                    amount_str = match.group(1).replace(',', '')
-                    amounts.append(float(amount_str))
+                    amount_str = match.group(1).replace(',', '').replace(' ', '')
+                    amount = float(amount_str)
+                    if amount > 10:  # Filter tiny amounts
+                        all_amounts.append(amount)
+                        print(f"   Found: ${amount:,.2f}")
                 except:
                     continue
         
-        # Return the largest amount found (likely the total)
-        return max(amounts) if amounts else 0.0
+        if all_amounts:
+            result = max(all_amounts)
+            print(f"✅ Selected max from all amounts: ${result:,.2f}")
+            return result
+        
+        print("❌ No amounts found")
+        return 0.0
     
     def _extract_currency(self, text):
         """Extract currency from text"""
