@@ -6,6 +6,20 @@ from werkzeug.utils import secure_filename
 import os
 from datetime import datetime
 from dotenv import load_dotenv
+import mlflow
+import os
+
+import mlflow
+import os
+
+# Configure DagsHub MLflow tracking
+os.environ['MLFLOW_TRACKING_USERNAME'] = 'l230861'
+os.environ['MLFLOW_TRACKING_PASSWORD'] = '95c0b9c5cbeb5e8a79f5dfd125cc78bf9bfdaf3d'
+
+mlflow.set_tracking_uri("https://dagshub.com/l230861/invoice-analyzer.mlflow")
+mlflow.set_experiment("production-invoice-processing")
+
+print("✅ MLflow cloud tracking enabled")
 
 # Load environment variables from .env file
 load_dotenv()
@@ -159,20 +173,34 @@ def upload_file():
         return jsonify({'error': 'No file uploaded'}), 400
     
     file = request.files['file']
+    if file.filename == '' or not allowed_file(file.filename):
+        return jsonify({'error': 'Invalid file'}), 400
     
-    if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
+    filename = secure_filename(file.filename)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    unique_filename = f"{timestamp}_{filename}"
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+    file.save(filepath)
     
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        unique_filename = f"{timestamp}_{filename}"
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
-        file.save(filepath)
-        
-        # Process with AI
+    # Track with MLflow Cloud
+    with mlflow.start_run(run_name=f"invoice_processing_{timestamp}"):
         try:
+            # Log input parameters
+            mlflow.log_param("filename", unique_filename)
+            mlflow.log_param("user_id", current_user.id)
+            mlflow.log_param("upload_time", timestamp)
+            
+            # Process invoice
             result = analyzer.analyze_document(filepath)
+            
+            # Log results as metrics
+            mlflow.log_metric("total_amount", result['total_amount'])
+            mlflow.log_metric("confidence_score", result['confidence'])
+            
+            # Log results as parameters
+            mlflow.log_param("vendor_name", result['vendor_name'])
+            mlflow.log_param("currency", result['currency'])
+            mlflow.log_param("document_type", result['document_type'])
             
             # Save to database
             new_doc = Document(
@@ -185,6 +213,7 @@ def upload_file():
                 confidence_score=result['confidence'],
                 user_id=current_user.id
             )
+            
             db.session.add(new_doc)
             db.session.commit()
             
@@ -193,11 +222,12 @@ def upload_file():
                 'data': result,
                 'doc_id': new_doc.id
             })
-        
+            
         except Exception as e:
+            mlflow.log_param("error", str(e))
+            mlflow.log_param("status", "failed")
             return jsonify({'error': str(e)}), 500
-    
-    return jsonify({'error': 'Invalid file type'}), 400
+
 
 @app.route('/history')
 @login_required
